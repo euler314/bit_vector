@@ -29,19 +29,37 @@ inline bool bittest64(std::int64_t x, std::int64_t idx)
 #endif
 }
 
-class bit_vector
+struct bit_vector
 {
-public:
-	bit_vector(std::int64_t n)
-		: n_(n), 
-		blocks_((n_ >> 6ull) + 1), 
+	bit_vector(std::int64_t n, std::int64_t init = 0)
+		: n_(n),
+		blocks_((n_ >> 6ull) + 1),
 		arr_(new std::int64_t[blocks_])
 	{
 		assert(n_ > 0);
-		std::memset(arr_, 0, sizeof(std::int64_t) * blocks_);
+		std::memset(arr_, init, sizeof(std::int64_t) * blocks_);
+
+		const std::int64_t i = n_ % 64;
+		const std::int64_t mask = (1ull << i) - 1ull;
+		arr_[blocks_ - 1] &= mask;
+	}
+	
+	bit_vector(const bit_vector& other)
+		: n_(other.n_), 
+		blocks_(other.blocks_),
+		arr_(other.n_ > 0 ? new std::int64_t[other.n_] : 0)
+	{
+		assert(n_ == other.n_);
+		assert(blocks_ == other.blocks_);
+
+		if (arr_)
+		{
+			memcpy(arr_, other.arr_, sizeof(std::int64_t) * other.n_);
+		}
+
+		assert(std::equal(arr_, arr_ + n_, other.arr_));
 	}
 
-	bit_vector(const bit_vector&) = delete;
 	bit_vector& operator = (const bit_vector&) = delete;
 
 	~bit_vector()
@@ -67,6 +85,13 @@ public:
 		const std::int64_t pos = i - 64ull * idx;
 
 		arr_[idx] |= (1ull << pos);
+	}
+
+	void clear()
+	{
+		std::memset(arr_, 0, sizeof(std::int64_t) * blocks_);
+
+		assert(0 == count());
 	}
 
 	std::int64_t count() const
@@ -95,7 +120,6 @@ public:
 		}
 	}
 
-private:
 	const std::int64_t n_;
 	const std::int64_t blocks_;
 	std::int64_t* arr_;
@@ -114,4 +138,10 @@ int main()
 	bv.set(200); assert(bv.get(200));
 
 	bv.get_values(std::ostream_iterator<int>(std::cout, " "));
+	
+	for (std::int64_t i = 1; i < 4096; ++i)
+	{
+		bit_vector b(i, 0xFFFFFFFFFFFFFFFF);
+		assert(b.count() == i);
+	}
 }
