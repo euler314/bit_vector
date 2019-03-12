@@ -5,7 +5,11 @@
 #include <cassert>
 #include <cstring>
 #include <algorithm>
+#include <numeric>
 #include <iterator>
+
+// For testing.
+#include <vector>
 
 #if defined (_MSC_VER)
 #include <intrin.h> 
@@ -29,42 +33,75 @@ inline bool bittest64(std::int64_t x, std::int64_t idx)
 #endif
 }
 
-struct bit_vector
+class bit_vector
 {
+public:
 	bit_vector(std::int64_t n, std::int64_t init = 0)
 		: n_(n),
 		blocks_((n_ >> 6ull) + 1),
 		arr_(new std::int64_t[blocks_])
 	{
 		assert(n_ > 0);
-		std::memset(arr_, init, sizeof(std::int64_t) * blocks_);
+
+		std::fill(arr_, arr_ + blocks_, init);
 
 		const std::int64_t i = n_ % 64;
 		const std::int64_t mask = (1ull << i) - 1ull;
 		arr_[blocks_ - 1] &= mask;
 	}
-	
+
 	bit_vector(const bit_vector& other)
-		: n_(other.n_), 
+		: n_(other.n_),
 		blocks_(other.blocks_),
-		arr_(other.n_ > 0 ? new std::int64_t[other.n_] : 0)
+		arr_(new std::int64_t[other.n_])
 	{
 		assert(n_ == other.n_);
 		assert(blocks_ == other.blocks_);
-
+		
 		if (arr_)
 		{
-			memcpy(arr_, other.arr_, sizeof(std::int64_t) * other.n_);
+			std::copy(other.arr_, other.arr_ + other.blocks_, arr_);
 		}
 
 		assert(std::equal(arr_, arr_ + n_, other.arr_));
 	}
 
-	bit_vector& operator = (const bit_vector&) = delete;
+	bit_vector& operator=(const bit_vector& other)
+	{
+		bit_vector temp(other);
+		temp.swap(*this);
+		return *this;
+	}
+
+	bit_vector(bit_vector&& other) noexcept
+	{
+		other.swap(*this);
+	}
+
+	bit_vector& operator=(bit_vector&& other) noexcept
+	{
+		other.swap(*this);
+		return *this;
+	}
 
 	~bit_vector()
 	{
-		delete[] arr_;
+		if (arr_)
+		{
+			delete[] arr_;
+		}
+	}
+
+	void swap(bit_vector& other) noexcept
+	{
+		std::swap(n_, other.n_);
+		std::swap(blocks_, other.blocks_);
+		std::swap(arr_, other.arr_);
+	}
+
+	friend void swap(bit_vector& lhs, bit_vector& rhs)
+	{
+		lhs.swap(rhs);
 	}
 
 	bool get(std::int64_t i) const
@@ -120,9 +157,10 @@ struct bit_vector
 		}
 	}
 
-	const std::int64_t n_;
-	const std::int64_t blocks_;
-	std::int64_t* arr_;
+	private:
+		std::int64_t n_;
+		std::int64_t blocks_;
+		std::int64_t* arr_;
 };
 
 int main()
@@ -137,11 +175,34 @@ int main()
 	bv.set(199); assert(bv.get(199));
 	bv.set(200); assert(bv.get(200));
 
-	bv.get_values(std::ostream_iterator<int>(std::cout, " "));
-	
 	for (std::int64_t i = 1; i < 4096; ++i)
 	{
 		bit_vector b(i, 0xFFFFFFFFFFFFFFFF);
 		assert(b.count() == i);
+
+		b.clear();
+		assert(b.count() == 0);
+
+		bit_vector q(i);
+		assert(q.count() == 0);
 	}
+
+	std::vector<int> v;
+	for (auto i = 0; i < 100; ++i)
+		v.push_back(i);
+
+	srand(123456789);
+	std::random_shuffle(v.begin(), v.end());
+
+	bit_vector sorter(*std::max_element(v.cbegin(), v.cend()));
+	std::for_each(v.cbegin(), v.cend(), [&](int e) { sorter.set(e); });
+
+	std::vector<int> result;
+	result.reserve(v.size());
+	sorter.get_values(std::back_inserter(result));
+
+	std::sort(v.begin(), v.end());
+	assert(std::equal(result.cbegin(), result.cend(), v.cbegin()));
+
+	std::cin.get();
 }
